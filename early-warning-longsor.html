@@ -1,0 +1,1286 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <title>TANALERT — Sistem Peringatan Dini Longsor</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Archivo+Expanded:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+      :root {
+        --bg-deep: #11150f;
+        --panel: #1a2018;
+        --panel-soft: #212820;
+        --line: #2b3329;
+        --clay: #c2703d;
+        --clay-soft: #8c5230;
+        --safe: #4f9d69;
+        --safe-glow: #7ccb94;
+        --warn: #d9a93a;
+        --danger: #c0473a;
+        --danger-glow: #e86f5c;
+        --mist: #e9e6dc;
+        --mist-dim: #9ca396;
+        --mono: "IBM Plex Mono", monospace;
+        --sans: "IBM Plex Sans", sans-serif;
+        --disp: "Archivo Expanded", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        background: var(--bg-deep);
+        color: var(--mist);
+        font-family: var(--sans);
+        height: 100%;
+        overflow-x: hidden;
+      }
+
+      body {
+        background-image:
+          radial-gradient(
+            circle at 85% 0%,
+            rgba(194, 112, 61, 0.08),
+            transparent 45%
+          ),
+          repeating-radial-gradient(
+            circle at 20% 30%,
+            transparent 0,
+            transparent 38px,
+            rgba(255, 255, 255, 0.012) 39px,
+            transparent 40px
+          ),
+          repeating-radial-gradient(
+            circle at 80% 75%,
+            transparent 0,
+            transparent 52px,
+            rgba(255, 255, 255, 0.012) 53px,
+            transparent 54px
+          );
+        min-height: 100vh;
+      }
+
+      /* ===== layout shell ===== */
+      .shell {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        min-height: 100vh;
+      }
+
+      /* ===== sidebar ===== */
+      .sidebar {
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+        padding: 28px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 36px;
+      }
+      .brand {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .brand .mark {
+        font-family: var(--disp);
+        font-weight: 800;
+        font-size: 22px;
+        letter-spacing: 0.5px;
+        color: var(--mist);
+      }
+      .brand .mark span {
+        color: var(--clay);
+      }
+      .brand .sub {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 1.5px;
+        color: var(--mist-dim);
+        text-transform: uppercase;
+      }
+
+      .nav {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .nav-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 2px;
+        color: var(--mist-dim);
+        text-transform: uppercase;
+        margin: 0 0 8px 12px;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        color: var(--mist-dim);
+        font-size: 14px;
+        font-weight: 500;
+        border-left: 2px solid transparent;
+        transition:
+          background 0.15s,
+          color 0.15s;
+        user-select: none;
+      }
+      .nav-item:hover {
+        background: var(--panel-soft);
+        color: var(--mist);
+      }
+      .nav-item.active {
+        background: var(--panel-soft);
+        color: var(--mist);
+        border-left: 2px solid var(--clay);
+      }
+      .nav-item .ico {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        opacity: 0.85;
+      }
+
+      .sidebar-foot {
+        margin-top: auto;
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--mist-dim);
+        line-height: 1.7;
+      }
+      .dot-live {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--safe-glow);
+        box-shadow: 0 0 6px var(--safe-glow);
+        margin-right: 6px;
+        animation: pulse 2s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.35;
+        }
+      }
+
+      /* ===== main ===== */
+      .main {
+        padding: 28px 36px 60px;
+        max-width: 1280px;
+      }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 28px;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      .topbar h1 {
+        font-family: var(--disp);
+        font-weight: 700;
+        font-size: 26px;
+        letter-spacing: 0.2px;
+      }
+      .topbar .desc {
+        color: var(--mist-dim);
+        font-size: 13px;
+        margin-top: 4px;
+      }
+      .station-tag {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--mist-dim);
+        text-align: right;
+        line-height: 1.6;
+      }
+      .station-tag b {
+        color: var(--mist);
+        font-weight: 600;
+      }
+
+      .view {
+        display: none;
+      }
+      .view.active {
+        display: block;
+      }
+
+      /* ===== alert banner (signature element) ===== */
+      .alert-banner {
+        position: relative;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 22px 26px;
+        margin-bottom: 26px;
+        overflow: hidden;
+        background: linear-gradient(
+          120deg,
+          var(--panel) 0%,
+          var(--panel-soft) 100%
+        );
+      }
+      .alert-banner::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: repeating-linear-gradient(
+          115deg,
+          transparent 0 18px,
+          rgba(255, 255, 255, 0.018) 18px 19px
+        );
+        pointer-events: none;
+      }
+      .alert-row {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        position: relative;
+        z-index: 1;
+      }
+      .alert-badge {
+        font-family: var(--disp);
+        font-weight: 800;
+        font-size: 13px;
+        letter-spacing: 1.5px;
+        padding: 8px 16px;
+        border-radius: 6px;
+        text-transform: uppercase;
+        flex-shrink: 0;
+      }
+      .alert-badge.aman {
+        background: rgba(79, 157, 105, 0.18);
+        color: var(--safe-glow);
+        border: 1px solid rgba(79, 157, 105, 0.4);
+      }
+      .alert-badge.waspada {
+        background: rgba(217, 169, 58, 0.18);
+        color: var(--warn);
+        border: 1px solid rgba(217, 169, 58, 0.4);
+      }
+      .alert-badge.bahaya {
+        background: rgba(192, 71, 58, 0.2);
+        color: var(--danger-glow);
+        border: 1px solid rgba(192, 71, 58, 0.5);
+      }
+      .alert-msg {
+        font-size: 14.5px;
+        color: var(--mist);
+        flex: 1;
+      }
+      .alert-msg b {
+        font-weight: 600;
+      }
+      .alert-time {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--mist-dim);
+        flex-shrink: 0;
+      }
+
+      /* ===== grid of cards ===== */
+      .grid3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        margin-bottom: 26px;
+      }
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: 18px;
+        margin-bottom: 26px;
+      }
+      @media (max-width: 980px) {
+        .grid3 {
+          grid-template-columns: 1fr;
+        }
+        .grid2 {
+          grid-template-columns: 1fr;
+        }
+        .shell {
+          grid-template-columns: 1fr;
+        }
+        .sidebar {
+          flex-direction: row;
+          overflow-x: auto;
+        }
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 20px;
+      }
+      .card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      .card-head h3 {
+        font-family: var(--disp);
+        font-size: 13px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--mist-dim);
+        font-weight: 700;
+      }
+      .status-chip {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 20px;
+        letter-spacing: 0.5px;
+      }
+      .status-chip.ok {
+        background: rgba(79, 157, 105, 0.16);
+        color: var(--safe-glow);
+      }
+      .status-chip.mid {
+        background: rgba(217, 169, 58, 0.16);
+        color: var(--warn);
+      }
+      .status-chip.bad {
+        background: rgba(192, 71, 58, 0.18);
+        color: var(--danger-glow);
+      }
+
+      .big-readout {
+        font-family: var(--mono);
+        font-weight: 600;
+        font-size: 42px;
+        line-height: 1;
+        color: var(--mist);
+      }
+      .big-readout .unit {
+        font-size: 16px;
+        color: var(--mist-dim);
+        margin-left: 4px;
+      }
+      .readout-sub {
+        font-size: 12.5px;
+        color: var(--mist-dim);
+        margin-top: 6px;
+      }
+
+      .bar-track {
+        width: 100%;
+        height: 8px;
+        background: var(--panel-soft);
+        border-radius: 6px;
+        overflow: hidden;
+        margin-top: 14px;
+        border: 1px solid var(--line);
+      }
+      .bar-fill {
+        height: 100%;
+        border-radius: 6px;
+        transition: width 0.4s ease;
+      }
+      .bar-fill.soil {
+        background: linear-gradient(90deg, var(--clay-soft), var(--clay));
+      }
+      .bar-fill.rain {
+        background: linear-gradient(90deg, #2e5c8a, #4f8fc9);
+      }
+
+      /* mini stat row used in dashboard */
+      .mini-stat {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .mini-stat .label {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--mist-dim);
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+      .mini-stat .val {
+        font-family: var(--mono);
+        font-size: 22px;
+        font-weight: 600;
+      }
+
+      /* contour signature divider */
+      .contour-divider {
+        height: 30px;
+        margin: 6px 0 22px;
+        opacity: 0.5;
+      }
+
+      /* waveform canvas */
+      canvas {
+        display: block;
+        width: 100%;
+        height: 90px;
+      }
+
+      /* ===== sensor data view (table-like detail cards) ===== */
+      .sensor-detail-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 18px;
+      }
+      @media (max-width: 980px) {
+        .sensor-detail-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .field-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+      }
+      .field-row:last-child {
+        border-bottom: none;
+      }
+      .field-row .k {
+        color: var(--mist-dim);
+      }
+      .field-row .v {
+        font-family: var(--mono);
+        font-weight: 600;
+        color: var(--mist);
+      }
+
+      .gauge-wrap {
+        display: flex;
+        justify-content: center;
+        margin: 10px 0 4px;
+      }
+
+      .legend-line {
+        font-size: 11.5px;
+        color: var(--mist-dim);
+        margin-top: 10px;
+        line-height: 1.6;
+      }
+      .legend-line b {
+        color: var(--mist);
+      }
+
+      .table-card {
+        margin-top: 6px;
+      }
+      table.log-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+      }
+      table.log-table th {
+        text-align: left;
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--mist-dim);
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      table.log-table td {
+        padding: 9px 10px;
+        border-bottom: 1px solid var(--line);
+        font-family: var(--mono);
+        color: var(--mist);
+      }
+      table.log-table tr:last-child td {
+        border-bottom: none;
+      }
+      .tag {
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .tag.ok {
+        background: rgba(79, 157, 105, 0.16);
+        color: var(--safe-glow);
+      }
+      .tag.mid {
+        background: rgba(217, 169, 58, 0.16);
+        color: var(--warn);
+      }
+      .tag.bad {
+        background: rgba(192, 71, 58, 0.18);
+        color: var(--danger-glow);
+      }
+
+      ::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--line);
+        border-radius: 4px;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .dot-live {
+          animation: none;
+        }
+      }
+
+      a,
+      button {
+        font-family: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <!-- ============ SIDEBAR ============ -->
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="mark">TANA<span>ALERT</span></div>
+          <div class="sub">Early Warning · Longsor</div>
+        </div>
+
+        <nav class="nav">
+          <div class="nav-label">Menu</div>
+          <div class="nav-item active" data-view="dashboard">
+            <svg
+              class="ico"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+            >
+              <path
+                d="M3 13h6V3H3v10Zm0 8h6v-6H3v6Zm8 0h10V11H11v10Zm0-18v6h10V3H11Z"
+              />
+            </svg>
+            Dashboard
+          </div>
+          <div class="nav-item" data-view="sensor">
+            <svg
+              class="ico"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+            >
+              <path d="M3 17l4-6 4 3 4-9 4 8" />
+              <circle cx="3" cy="17" r="1.2" fill="currentColor" />
+              <circle cx="21" cy="13" r="1.2" fill="currentColor" />
+            </svg>
+            Data Sensor
+          </div>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div><span class="dot-live"></span>NODE-SENSOR· ONLINE</div>
+          <div id="clockTag">— : —</div>
+        </div>
+      </aside>
+
+      <!-- ============ MAIN ============ -->
+      <main class="main">
+        <!-- ================= VIEW: DASHBOARD ================= -->
+        <section class="view active" id="view-dashboard">
+          <div class="topbar">
+            <div>
+              <h1>Ringkasan Pemantauan</h1>
+              <div class="desc">
+                Status gabungan dari tiga sensor lapangan, diperbarui tiap 3
+                detik.
+              </div>
+            </div>
+          </div>
+
+          <!-- signature contour divider -->
+          <svg
+            class="contour-divider"
+            viewBox="0 0 1200 40"
+            preserveAspectRatio="none"
+          >
+            <path
+              d="M0 30 Q150 5 300 30 T600 30 T900 30 T1200 30"
+              stroke="#2B3329"
+              stroke-width="1"
+              fill="none"
+            />
+            <path
+              d="M0 22 Q150 -3 300 22 T600 22 T900 22 T1200 22"
+              stroke="#C2703D"
+              stroke-width="1"
+              fill="none"
+              opacity="0.4"
+            />
+          </svg>
+
+          <div class="alert-banner">
+            <div class="alert-row">
+              <div class="alert-badge waspada" id="globalBadge">WASPADA</div>
+              <div class="alert-msg">
+                Tingkat risiko gabungan saat ini <b>WASPADA</b> — kelembapan
+                tanah meningkat disertai getaran ringan. Pantau terus pembaruan
+                sensor.
+              </div>
+              <div class="alert-time" id="globalTime">Diperbarui 00:00:00</div>
+            </div>
+          </div>
+
+          <div class="grid3">
+            <div class="card">
+              <div class="card-head">
+                <h3>Curah Hujan</h3>
+                <span class="status-chip mid" id="dashRainStatus">GERIMIS</span>
+              </div>
+              <div class="big-readout">
+                <span id="dashRainPct">42</span><span class="unit">%</span>
+              </div>
+              <div class="readout-sub">
+                ADC: <span id="dashRainAdc">1720</span> / 4095
+              </div>
+              <div class="bar-track">
+                <div
+                  class="bar-fill rain"
+                  id="dashRainBar"
+                  style="width: 42%"
+                ></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h3>Kelembapan Tanah</h3>
+                <span class="status-chip ok" id="dashSoilStatus">LEMBAP</span>
+              </div>
+              <div class="big-readout">
+                <span id="dashSoilPct">58</span><span class="unit">%</span>
+              </div>
+              <div class="readout-sub">
+                ADC: <span id="dashSoilAdc">2376</span> / 4095
+              </div>
+              <div class="bar-track">
+                <div
+                  class="bar-fill soil"
+                  id="dashSoilBar"
+                  style="width: 58%"
+                ></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h3>Getaran Tanah</h3>
+                <span class="status-chip mid" id="dashVibStatus"
+                  >GETARAN RINGAN</span
+                >
+              </div>
+              <div class="big-readout">
+                <span id="dashAccelMag">1.46</span><span class="unit">g</span>
+              </div>
+              <div class="readout-sub">
+                Pitch <span id="dashPitchMini">3.2°</span> · Roll
+                <span id="dashRollMini">-1.8°</span>
+              </div>
+              <canvas id="waveMini" height="40"></canvas>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div class="card">
+              <div class="card-head">
+                <h3>Tren Sensor — 30 Pembacaan Terakhir</h3>
+              </div>
+              <canvas id="trendChart" height="220"></canvas>
+              <div class="legend-line">
+                <b style="color: #4f8fc9">●</b> Hujan (%) &nbsp;
+                <b style="color: #c2703d">●</b> Tanah (%) &nbsp;
+                <b style="color: #d9a93a">●</b> Getaran (g ×30)
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h3>Distribusi Risiko Hari Ini</h3></div>
+              <div
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  gap: 14px;
+                  margin-top: 6px;
+                "
+              >
+                <div>
+                  <div class="field-row">
+                    <span class="k">AMAN</span
+                    ><span class="v" style="color: var(--safe-glow)">64%</span>
+                  </div>
+                  <div class="bar-track">
+                    <div
+                      class="bar-fill"
+                      style="width: 64%; background: var(--safe)"
+                    ></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="field-row">
+                    <span class="k">WASPADA</span
+                    ><span class="v" style="color: var(--warn)">29%</span>
+                  </div>
+                  <div class="bar-track">
+                    <div
+                      class="bar-fill"
+                      style="width: 29%; background: var(--warn)"
+                    ></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="field-row">
+                    <span class="k">BAHAYA</span
+                    ><span class="v" style="color: var(--danger-glow)">7%</span>
+                  </div>
+                  <div class="bar-track">
+                    <div
+                      class="bar-fill"
+                      style="width: 7%; background: var(--danger)"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+              <div class="legend-line">
+                Berdasarkan klasifikasi model Decision Tree dari 3 sensor
+                (hujan, tanah, MPU6050).
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= VIEW: DATA SENSOR ================= -->
+        <section class="view" id="view-sensor">
+          <div class="topbar">
+            <div>
+              <h1>Data Sensor Lapangan</h1>
+              <div class="desc">
+                Nilai mentah (ADC/raw) dan hasil konversi dari tiap sensor
+                terpasang.
+              </div>
+            </div>
+            <div class="station-tag">
+              MODE <b>LIVE</b><br />
+              INTERVAL <b>3s</b>
+            </div>
+          </div>
+
+          <div class="sensor-detail-grid">
+            <!-- RAIN SENSOR -->
+            <div class="card">
+              <div class="card-head">
+                <h3>Sensor Hujan</h3>
+                <span class="status-chip mid" id="sRainStatus">GERIMIS</span>
+              </div>
+              <div class="gauge-wrap">
+                <svg
+                  id="gaugeRain"
+                  width="140"
+                  height="80"
+                  viewBox="0 0 140 80"
+                ></svg>
+              </div>
+              <div class="field-row">
+                <span class="k">Nilai ADC</span
+                ><span class="v" id="sRainAdc">1720</span>
+              </div>
+              <div class="field-row">
+                <span class="k">Persentase</span
+                ><span class="v" id="sRainPct">42%</span>
+              </div>
+              <div class="field-row">
+                <span class="k">Status</span
+                ><span class="v" id="sRainStatusTxt">Gerimis</span>
+              </div>
+              <div class="legend-line">
+                <b>Klasifikasi:</b> &lt;30% Terang · 30–60% Gerimis · &gt;60%
+                Hujan
+              </div>
+            </div>
+
+            <!-- SOIL SENSOR -->
+            <div class="card">
+              <div class="card-head">
+                <h3>Sensor Kelembapan Tanah</h3>
+                <span class="status-chip ok" id="sSoilStatus">LEMBAP</span>
+              </div>
+              <div class="gauge-wrap">
+                <svg
+                  id="gaugeSoil"
+                  width="140"
+                  height="80"
+                  viewBox="0 0 140 80"
+                ></svg>
+              </div>
+              <div class="field-row">
+                <span class="k">Nilai ADC</span
+                ><span class="v" id="sSoilAdc">2376</span>
+              </div>
+              <div class="field-row">
+                <span class="k">Persentase</span
+                ><span class="v" id="sSoilPct">58%</span>
+              </div>
+              <div class="field-row">
+                <span class="k">Status</span
+                ><span class="v" id="sSoilStatusTxt">Lembap</span>
+              </div>
+              <div class="legend-line">
+                <b>Klasifikasi:</b> &lt;30% Kering · 30–70% Lembap · &gt;70%
+                Basah
+              </div>
+            </div>
+
+            <!-- MPU6050 -->
+            <div class="card">
+              <div class="card-head">
+                <h3>Sensor MPU6050</h3>
+                <span class="status-chip mid" id="sVibStatus"
+                  >GETARAN RINGAN</span
+                >
+              </div>
+              <canvas id="waveDetail" height="80"></canvas>
+              <div class="field-row">
+                <span class="k">Accel Magnitude</span
+                ><span class="v" id="sAccelMag">1.46 g</span>
+              </div>
+              <div class="field-row">
+                <span class="k">Gyro Magnitude</span
+                ><span class="v" id="sGyroMag">10.7 °/s</span>
+              </div>
+              <div class="field-row">
+                <span class="k">Pitch</span
+                ><span class="v" id="sPitch">3.2°</span>
+              </div>
+              <div class="field-row">
+                <span class="k">Roll</span
+                ><span class="v" id="sRoll">-1.8°</span>
+              </div>
+              <div class="field-row">
+                <span class="k">Status</span
+                ><span class="v" id="sVibStatusTxt">Getaran Ringan</span>
+              </div>
+              <div class="legend-line">
+                <b>Klasifikasi:</b> &lt;1.2g Stabil · 1.2–2.0g Getaran Ringan ·
+                &gt;2.0g Getaran Kuat
+              </div>
+            </div>
+          </div>
+
+          <div class="card table-card" style="margin-top: 18px">
+            <div class="card-head"><h3>Log Pembacaan Terbaru</h3></div>
+            <div style="overflow-x: auto">
+              <table class="log-table">
+                <thead>
+                  <tr>
+                    <th>Waktu</th>
+                    <th>Hujan ADC</th>
+                    <th>Hujan %</th>
+                    <th>Status Hujan</th>
+                    <th>Tanah ADC</th>
+                    <th>Tanah %</th>
+                    <th>Status Tanah</th>
+                    <th>Accel (g)</th>
+                    <th>Status Getaran</th>
+                  </tr>
+                </thead>
+                <tbody id="logBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ===================== FIREBASE SDK ===================== -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+    <script>
+      /* ===================== KONFIGURASI FIREBASE =====================
+   Isi sesuai project Firebase Anda sendiri (Project Settings -> General
+   -> Your apps -> Web app). Boleh sama dengan kredensial yang dipakai
+   di receiver_edge_gateway.ino (kecuali email/password device, itu
+   khusus untuk autentikasi ESP32, bukan untuk web).
+*/
+      const firebaseConfig = {
+        apiKey: "AIzaSyDBES0fKghLSVWoZSXTGxG1Q_uYLN-l6ZY",
+        databaseURL: "https://dht11-19a61-default-rtdb.firebaseio.com",
+        projectId: "dht11-19a61",
+      };
+
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.database();
+
+      // PATH INI HARUS SAMA PERSIS DENGAN YANG DIPAKAI DI receiver_edge_gateway.ino
+      const PATH_LATEST = "/tanaalert/NODE-07/latest";
+      const PATH_LOG = "/tanaalert/NODE-07/log";
+
+      /* ===================== NAV SWITCH ===================== */
+      document.querySelectorAll(".nav-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          document
+            .querySelectorAll(".nav-item")
+            .forEach((i) => i.classList.remove("active"));
+          item.classList.add("active");
+          const target = item.dataset.view;
+          document
+            .querySelectorAll(".view")
+            .forEach((v) => v.classList.remove("active"));
+          document.getElementById("view-" + target).classList.add("active");
+        });
+      });
+
+      /* ===================== CLOCK ===================== */
+      function tickClock() {
+        const d = new Date();
+        document.getElementById("clockTag").textContent =
+          d.toLocaleTimeString("id-ID");
+      }
+      setInterval(tickClock, 1000);
+      tickClock();
+
+      /* ===================== MAPPING STATUS DARI DEVICE =====================
+   PENTING: klasifikasi (AMAN/WASPADA/BAHAYA) SUDAH dihitung oleh model
+   Random Forest di ESP32 (Edge Gateway) dan dikirim sebagai field
+   "riskStatus", "rainStatus", "soilStatus", "vibStatus" di setiap data.
+   Dashboard ini TIDAK menghitung ulang klasifikasi - hanya memetakan
+   teks status dari device ke {label, cls} untuk keperluan tampilan.
+   Ini supaya hanya ada SATU sumber kebenaran (model di gateway),
+   bukan dua logika klasifikasi yang bisa berbeda hasil.
+*/
+      function mapRainStatus(s) {
+        const m = {
+          Terang: { label: "TERANG", cls: "ok" },
+          Gerimis: { label: "GERIMIS", cls: "mid" },
+          Hujan: { label: "HUJAN", cls: "bad" },
+        };
+        return m[s] || { label: s || "-", cls: "ok" };
+      }
+      function mapSoilStatus(s) {
+        const m = {
+          Kering: { label: "KERING", cls: "mid" },
+          Lembab: { label: "LEMBAP", cls: "ok" },
+          Basah: { label: "BASAH", cls: "bad" },
+        };
+        return m[s] || { label: s || "-", cls: "ok" };
+      }
+      function mapVibStatus(s) {
+        const m = {
+          STABIL: { label: "STABIL", cls: "ok" },
+          GETARAN_RINGAN: { label: "GETARAN RINGAN", cls: "mid" },
+          GETARAN_KUAT: { label: "GETARAN KUAT", cls: "bad" },
+        };
+        return m[s] || { label: s || "-", cls: "ok" };
+      }
+      function mapOverall(s) {
+        const m = {
+          AMAN: { label: "AMAN", cls: "aman" },
+          WASPADA: { label: "WASPADA", cls: "waspada" },
+          BAHAYA: { label: "BAHAYA", cls: "bahaya" },
+        };
+        return m[s] || { label: s || "-", cls: "aman" };
+      }
+
+      /* ===================== STATE DATA REAL-TIME ===================== */
+      let history = []; // diisi dari node "log" Firebase: {rainPct, soilPct, vib}
+      let hasReceivedData = false;
+
+      // Mengubah satu record mentah dari Firebase jadi bentuk "frame" yang
+      // dipakai fungsi render() (sama strukturnya dengan computeFrame() lama)
+      function toFrame(d) {
+        return {
+          rainAdc: d.rainADC ?? 0,
+          soilAdc: d.soilADC ?? 0,
+          rainPct: d.rainPct ?? 0,
+          soilPct: d.soilPct ?? 0,
+          accelMag: d.accelMagnitude ?? 0,
+          gyroMag: d.gyroMagnitude ?? 0,
+          pitch: d.pitch ?? 0,
+          roll: d.roll ?? 0,
+          rS: mapRainStatus(d.rainStatus),
+          sS: mapSoilStatus(d.soilStatus),
+          vS: mapVibStatus(d.vibStatus),
+          overall: mapOverall(d.riskStatus),
+          timestamp: d.timestamp ?? Date.now() / 1000,
+        };
+      }
+
+      /* ===================== RENDER ===================== */
+      function setChip(el, status) {
+        el.textContent = status.label;
+        el.className = "status-chip " + status.cls;
+      }
+      function setTag(el, status) {
+        el.textContent = status.label;
+        el.className = "tag " + status.cls;
+      }
+
+      function gaugeSVG(svg, pct, color) {
+        svg.innerHTML = "";
+        const cx = 70,
+          cy = 72,
+          r = 56;
+        const startAngle = Math.PI,
+          endAngle = 0; // half circle top
+        const arcPath = (a0, a1, rad) => {
+          const x0 = cx + rad * Math.cos(a0),
+            y0 = cy - rad * Math.sin(a0);
+          const x1 = cx + rad * Math.cos(a1),
+            y1 = cy - rad * Math.sin(a1);
+          return `M ${x0} ${y0} A ${rad} ${rad} 0 0 1 ${x1} ${y1}`;
+        };
+        const bg = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "path",
+        );
+        bg.setAttribute("d", arcPath(startAngle, 0, r));
+        bg.setAttribute("stroke", "#2B3329");
+        bg.setAttribute("stroke-width", "10");
+        bg.setAttribute("fill", "none");
+        bg.setAttribute("stroke-linecap", "round");
+        svg.appendChild(bg);
+
+        const frac = Math.min(1, Math.max(0, pct / 100));
+        const fillAngle = startAngle - frac * startAngle;
+        const fg = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "path",
+        );
+        fg.setAttribute("d", arcPath(startAngle, fillAngle, r));
+        fg.setAttribute("stroke", color);
+        fg.setAttribute("stroke-width", "10");
+        fg.setAttribute("fill", "none");
+        fg.setAttribute("stroke-linecap", "round");
+        svg.appendChild(fg);
+
+        const txt = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "text",
+        );
+        txt.setAttribute("x", cx);
+        txt.setAttribute("y", cy - 6);
+        txt.setAttribute("text-anchor", "middle");
+        txt.setAttribute("fill", "#E9E6DC");
+        txt.setAttribute("font-family", "IBM Plex Mono, monospace");
+        txt.setAttribute("font-size", "22");
+        txt.setAttribute("font-weight", "600");
+        txt.textContent = pct + "%";
+        svg.appendChild(txt);
+      }
+
+      function drawWave(canvas, data, color) {
+        const ctx = canvas.getContext("2d");
+        const w = (canvas.width = canvas.clientWidth);
+        const h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        data.forEach((v, i) => {
+          const x = (i / (data.length - 1)) * w;
+          const y = h - (v / 3.0) * h * 0.9 - 4;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+
+      function drawTrend(canvas, hist) {
+        const ctx = canvas.getContext("2d");
+        const w = (canvas.width = canvas.clientWidth);
+        const h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        // grid
+        ctx.strokeStyle = "#2B3329";
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+          const y = (h / 4) * i;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+        function plot(key, color, scale) {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          hist.forEach((d, i) => {
+            const x = (i / (hist.length - 1)) * w;
+            const val = d[key] * scale;
+            const y = h - (val / 100) * h;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        }
+        plot("rainPct", "#4F8FC9", 1);
+        plot("soilPct", "#C2703D", 1);
+        plot("vib", "#D9A93A", 30);
+      }
+
+      const logBody = document.getElementById("logBody");
+      // Membangun ulang seluruh tabel log dari snapshot "log" Firebase
+      // (urutan terbaru di atas), maksimal 8 baris ditampilkan.
+      function renderLogTable(records) {
+        logBody.innerHTML = "";
+        const rows = records.slice(-8).reverse();
+        rows.forEach((d) => {
+          const f = toFrame(d);
+          const time = new Date(f.timestamp * 1000).toLocaleTimeString("id-ID");
+          const row = document.createElement("tr");
+          row.innerHTML = `
+    <td>${time}</td>
+    <td>${f.rainAdc}</td>
+    <td>${f.rainPct}%</td>
+    <td><span class="tag ${f.rS.cls}">${f.rS.label}</span></td>
+    <td>${f.soilAdc}</td>
+    <td>${f.soilPct}%</td>
+    <td><span class="tag ${f.sS.cls}">${f.sS.label}</span></td>
+    <td>${f.accelMag.toFixed(2)}</td>
+    <td><span class="tag ${f.vS.cls}">${f.vS.label}</span></td>
+  `;
+          logBody.appendChild(row);
+        });
+      }
+
+      function render(f) {
+        // Dashboard
+        document.getElementById("dashRainPct").textContent = f.rainPct;
+        document.getElementById("dashRainAdc").textContent = f.rainAdc;
+        document.getElementById("dashRainBar").style.width = f.rainPct + "%";
+        setChip(document.getElementById("dashRainStatus"), f.rS);
+
+        document.getElementById("dashSoilPct").textContent = f.soilPct;
+        document.getElementById("dashSoilAdc").textContent = f.soilAdc;
+        document.getElementById("dashSoilBar").style.width = f.soilPct + "%";
+        setChip(document.getElementById("dashSoilStatus"), f.sS);
+
+        document.getElementById("dashAccelMag").textContent =
+          f.accelMag.toFixed(2);
+        document.getElementById("dashPitchMini").textContent =
+          f.pitch.toFixed(1) + "°";
+        document.getElementById("dashRollMini").textContent =
+          f.roll.toFixed(1) + "°";
+        setChip(document.getElementById("dashVibStatus"), f.vS);
+
+        const badge = document.getElementById("globalBadge");
+        badge.textContent = f.overall.label;
+        badge.className = "alert-badge " + f.overall.cls;
+        document.getElementById("globalTime").textContent =
+          "Diperbarui " + new Date().toLocaleTimeString("id-ID");
+
+        // Sensor view
+        document.getElementById("sRainAdc").textContent = f.rainAdc;
+        document.getElementById("sRainPct").textContent = f.rainPct + "%";
+        document.getElementById("sRainStatusTxt").textContent =
+          f.rS.label.charAt(0) + f.rS.label.slice(1).toLowerCase();
+        setChip(document.getElementById("sRainStatus"), f.rS);
+        gaugeSVG(document.getElementById("gaugeRain"), f.rainPct, "#4F8FC9");
+
+        document.getElementById("sSoilAdc").textContent = f.soilAdc;
+        document.getElementById("sSoilPct").textContent = f.soilPct + "%";
+        document.getElementById("sSoilStatusTxt").textContent =
+          f.sS.label.charAt(0) + f.sS.label.slice(1).toLowerCase();
+        setChip(document.getElementById("sSoilStatus"), f.sS);
+        gaugeSVG(document.getElementById("gaugeSoil"), f.soilPct, "#C2703D");
+
+        document.getElementById("sAccelMag").textContent =
+          f.accelMag.toFixed(2) + " g";
+        document.getElementById("sGyroMag").textContent =
+          f.gyroMag.toFixed(1) + " °/s";
+        document.getElementById("sPitch").textContent =
+          f.pitch.toFixed(1) + "°";
+        document.getElementById("sRoll").textContent = f.roll.toFixed(1) + "°";
+        document.getElementById("sVibStatusTxt").textContent = f.vS.label;
+        setChip(document.getElementById("sVibStatus"), f.vS);
+
+        // waves & trend (pakai history dari node "log" Firebase)
+        const waveData = history.map((h) => h.vib);
+        drawWave(document.getElementById("waveMini"), waveData, "#D9A93A");
+        drawWave(document.getElementById("waveDetail"), waveData, "#D9A93A");
+        drawTrend(document.getElementById("trendChart"), history);
+      }
+
+      /* ===================== LISTENER FIREBASE REAL-TIME =====================
+   1. PATH_LATEST: dipakai untuk angka & status yang tampil "saat ini"
+      di Dashboard dan Data Sensor.
+   2. PATH_LOG: dipakai untuk tabel log historis dan grafik tren/wave.
+   Keduanya diisi oleh receiver_edge_gateway.ino setiap ada paket LoRa
+   masuk dari Sensor Node.
+*/
+      db.ref(PATH_LATEST).on(
+        "value",
+        (snapshot) => {
+          const data = snapshot.val();
+          if (!data) return;
+          hasReceivedData = true;
+          render(toFrame(data));
+        },
+        (error) => {
+          console.error("Gagal membaca PATH_LATEST dari Firebase:", error);
+        },
+      );
+
+      db.ref(PATH_LOG)
+        .orderByKey()
+        .limitToLast(30)
+        .on(
+          "value",
+          (snapshot) => {
+            const val = snapshot.val();
+            if (!val) return;
+            const records = Object.values(val); // urut sesuai key (waktu push)
+            history = records.map((d) => ({
+              rainPct: d.rainPct ?? 0,
+              soilPct: d.soilPct ?? 0,
+              vib: d.accelMagnitude ?? 0,
+            }));
+            renderLogTable(records);
+
+            // Jika belum ada data "latest" sama sekali, tampilkan data
+            // terakhir dari log supaya dashboard tidak kosong.
+            if (!hasReceivedData && records.length > 0) {
+              render(toFrame(records[records.length - 1]));
+            }
+          },
+          (error) => {
+            console.error("Gagal membaca PATH_LOG dari Firebase:", error);
+          },
+        );
+
+      window.addEventListener("resize", () => {
+        drawWave(
+          document.getElementById("waveMini"),
+          history.map((h) => h.vib),
+          "#D9A93A",
+        );
+        drawWave(
+          document.getElementById("waveDetail"),
+          history.map((h) => h.vib),
+          "#D9A93A",
+        );
+        drawTrend(document.getElementById("trendChart"), history);
+      });
+    </script>
+  </body>
+</html>
