@@ -69,15 +69,44 @@ def load_dataset(paths):
         df.columns = [c.strip() for c in df.columns]
         dfs.append(df)
     full = pd.concat(dfs, ignore_index=True)
-    print(f"[INFO] Total data setelah digabung: {len(full)} baris")
-    print(full["Label"].value_counts())
+
+    # --- Bersihkan baris kosong / tidak lengkap (umum terjadi karena baris
+    # kosong nyangkut di akhir file CSV saat export dari Excel/Sheets) ---
+    before = len(full)
+    required_cols = FEATURES + ["Label"]
+    full = full.dropna(subset=required_cols).reset_index(drop=True)
+    removed = before - len(full)
+    if removed > 0:
+        print(f"[INFO] {removed} baris kosong/tidak lengkap dibuang otomatis.")
+
+    # --- Cek duplikat exact (boleh saja terjadi wajar pada sensor ADC,
+    # tapi tetap diinfokan untuk transparansi) ---
+    dup_count = full.duplicated(subset=required_cols).sum()
+    if dup_count > 0:
+        print(f"[INFO] Ditemukan {dup_count} baris duplikat persis (tidak dibuang otomatis).")
+
+    print(f"[INFO] Total data setelah dibersihkan & digabung: {len(full)} baris")
+    counts = full["Label"].value_counts()
+    print(counts)
+
+    # --- Peringatan ketidakseimbangan kelas ---
+    if len(counts) > 0:
+        ratio = counts.max() / counts.min()
+        if ratio >= 1.5:
+            print(f"\n[PERINGATAN] Distribusi kelas tidak seimbang (rasio {ratio:.1f}x antara "
+                  f"kelas terbanyak '{counts.idxmax()}' dan tersedikit '{counts.idxmin()}').")
+            print("             Model otomatis diberi class_weight='balanced' untuk mengompensasi,")
+            print("             tapi idealnya jumlah sampel per kelas dibuat lebih rata saat")
+            print("             pengumpulan data berikutnya.")
+
     return full
 
 
 def evaluate_model(X, y, class_names):
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
     rf = RandomForestClassifier(
-        n_estimators=N_ESTIMATORS, max_depth=MAX_DEPTH, random_state=RANDOM_STATE
+        n_estimators=N_ESTIMATORS, max_depth=MAX_DEPTH, random_state=RANDOM_STATE,
+        class_weight="balanced"
     )
     scores = cross_val_score(rf, X, y, cv=skf)
     print(f"\n[HASIL] Cross-validation accuracy (5-fold): {scores}")
@@ -87,7 +116,8 @@ def evaluate_model(X, y, class_names):
         X, y, test_size=0.2, stratify=y, random_state=RANDOM_STATE
     )
     rf_eval = RandomForestClassifier(
-        n_estimators=N_ESTIMATORS, max_depth=MAX_DEPTH, random_state=RANDOM_STATE
+        n_estimators=N_ESTIMATORS, max_depth=MAX_DEPTH, random_state=RANDOM_STATE,
+        class_weight="balanced"
     )
     rf_eval.fit(X_train, y_train)
     pred = rf_eval.predict(X_test)
@@ -220,7 +250,8 @@ def main():
 
     # Latih model FINAL pakai SELURUH data (bukan cuma 80% training split)
     rf_final = RandomForestClassifier(
-        n_estimators=N_ESTIMATORS, max_depth=MAX_DEPTH, random_state=RANDOM_STATE
+        n_estimators=N_ESTIMATORS, max_depth=MAX_DEPTH, random_state=RANDOM_STATE,
+        class_weight="balanced"
     )
     rf_final.fit(X, y)
 
