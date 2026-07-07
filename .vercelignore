@@ -1,0 +1,20 @@
+# Ignore non-frontend files
+Dataset/
+collect_mpu6050.ino
+collect_rain.ino
+collect_soil/
+firebase.json
+firebase.txt
+.firebaserc
+google_apps_script_collector.gs
+pengumpulan_dataset/
+percobaan_3_randomforest_300sampel_ipynb.ipynb
+percobaan_4_randomforest_1200sampel.ipynb
+receiver_edge_gateway/
+rf_model.h
+sensor_node/
+train_and_generate.py
+transmitter_sensor_node/
+.git
+.gitignore
+.firebase
