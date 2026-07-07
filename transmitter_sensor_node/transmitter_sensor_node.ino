@@ -68,7 +68,7 @@
 // supaya format tetap konsisten dan mudah dikembangkan ke multi-node
 // di kemudian hari tanpa mengubah struktur paket / kode receiver.
 #define NODE_ID          "NODE-07"
-#define SEND_INTERVAL_MS 5000UL   // kirim data setiap 5 detik
+#define SEND_INTERVAL_MS 10000UL   // kirim data setiap 5 detik
 
 // ====================== ALAMAT REGISTER MPU6050 ======================
 #define MPU6050_ADDR             0x68   // alamat default (AD0 -> GND)

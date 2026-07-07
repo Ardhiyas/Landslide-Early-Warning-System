@@ -51,7 +51,7 @@
 #include <Firebase_ESP_Client.h>
 #include "addons/TokenHelper.h"
 #include "addons/RTDBHelper.h"
-#include "rf_modell.h"
+#include "rf_modelll.h"
 
 // ====================== KONFIGURASI WIFI ======================
 #define WIFI_SSID      "Bos Dian"

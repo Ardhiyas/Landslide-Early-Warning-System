@@ -1,34 +1,27 @@
 /*
   =====================================================================
-  TANAALERT - PENGUJIAN KOMUNIKASI LoRa: RECEIVER
+  TANAALERT - PENGUJIAN KOMUNIKASI LoRa: RECEIVER (RTT Piggyback)
   =====================================================================
-  Sketch ini KHUSUS untuk pengujian Tabel 3.11 (Pengujian Komunikasi
-  LoRa) -- bukan receiver utama TANAALERT (tidak ada klasifikasi
-  Random Forest, Firebase, atau Telegram di sini, supaya fokus murni
-  menguji jarak & keandalan LoRa).
+  Receiver menampilkan delay, RSSI, Data Terkirim, Data Diterima,
+  dan keterangan -- semua tanpa transmitter perlu terhubung ke laptop.
 
-  Tugas:
-  1. Terima paket dari lora_test_transmitter.ino
-  2. Hitung "Data Terkirim" (dari nomor seq yang dibawa paket) vs
-     "Data Diterima" (counter lokal paket yang benar2 sampai)
-  3. Hitung RSSI dan estimasi delay
-  4. Nyalakan buzzer sebentar setiap ada paket masuk
-  5. Kirim baris log ke Google Sheets (tab "LoRaTest")
+  Delay yang ditampilkan = delay satu arah paket SEBELUMNYA (hasil RTT
+  yang dihitung transmitter dan disisipkan ke paket berikutnya).
+  Paket pertama delay = 0 (normal, belum ada data sebelumnya).
 
-  CATATAN PENTING soal Delay:
-  Delay dihitung dari millis() transmitter (ditempel di paket) vs
-  millis() receiver saat paket tiba. Ini HANYA akurat kalau kedua
-  ESP32 di-reset/nyala BERSAMAAN saat mulai pengujian, karena millis()
-  masing-masing board mulai dari 0 sendiri-sendiri saat boot (tidak
-  ada jam yang disinkronkan). Untuk pengujian jarak per skenario,
-  nyalakan ulang (reset) KEDUA board bersamaan sebelum mulai logging
-  supaya nilai delay valid secara relatif.
+  YANG DITAMPILKAN DI SERIAL MONITOR:
+  Seq | Data Terkirim | Data Diterima | RSSI    | Delay    | Keterangan
+    1 |             1 |             1 | -58 dBm |      0ms | Data Masuk (delay perdana)
+    2 |             2 |             2 | -61 dBm |    175ms | Data Masuk
+    3 |             3 |             3 | -59 dBm |    182ms | Data Masuk
+    5 |             5 |             4 | -63 dBm |    190ms | Hilang 1 paket
 
   WIRING:
-  LoRa SX1278: sama seperti receiver_edge_gateway.ino
-  Buzzer aktif: SIG -> GPIO4
+  LoRa SX1278: VCC->3.3V | GND->GND | RST->GPIO14 | DIO0->GPIO2
+               NSS->GPIO5 | SCK->GPIO18 | MISO->GPIO19 | MOSI->GPIO23
+  Buzzer aktif: SIG->GPIO4 | GND->GND
   =====================================================================
-*/ 
+*/
 
 #include <SPI.h>
 #include <LoRa.h>
@@ -36,14 +29,11 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 
-// ====================== KONFIGURASI WIFI ======================
+// ====================== KONFIGURASI ======================
 #define WIFI_SSID      "Bos Dian"
 #define WIFI_PASSWORD  "pakenanya"
+#define SCRIPT_URL     "https://script.google.com/macros/s/AKfycby9efyYNIt6U36lNuK4zmRe63SPbhTjs1Mn3Hsf31WSP9nXjrW10rMoIZAgY85xLlnm/exec"
 
-// ====================== KONFIGURASI GOOGLE SHEETS ======================
-#define SCRIPT_URL "https://script.google.com/macros/s/AKfycbyNCXKMpOk4nLQ5GqZTVD1zjk9GzryEcavwej0x3StcVZVhl-qbrlmjaK2NWm7H0kGt/exec"
-
-// ====================== KONFIGURASI PIN ======================
 #define LORA_NSS      5
 #define LORA_RST      14
 #define LORA_DIO0     2
@@ -52,127 +42,146 @@
 #define LORA_MOSI     23
 #define PIN_BUZZER    4
 
-#define LORA_FREQUENCY 433E6   // HARUS sama dengan transmitter
-#define BUZZER_BEEP_MS 300UL
+#define LORA_FREQUENCY  433E6
+#define LORA_SYNC_WORD  0x12
+#define BUZZER_BEEP_MS  150UL
 
 // ====================== STATE ======================
-unsigned long receivedCounter = 0;   // jumlah paket yang BENAR-BENAR sampai
+unsigned long receivedCounter = 0;
+bool wifiReady = false;
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
-  Serial.println("=== TANAALERT - Pengujian LoRa: RECEIVER ===");
+  delay(200);
+  Serial.println("=== TANAALERT LoRa Tester RECEIVER (RTT Piggyback) ===");
+  Serial.println("Delay, RSSI, dan status paket ditampilkan di sini.");
+  Serial.println("Transmitter tidak perlu terhubung ke laptop.\n");
 
   pinMode(PIN_BUZZER, OUTPUT);
   digitalWrite(PIN_BUZZER, LOW);
 
+  // LoRa DULU sebelum WiFi
   setupLoRa();
-  connectWiFi();
 
-  Serial.println("[OK] Receiver siap menerima paket uji.");
+  // WiFi non-blocking
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.println("[WiFi] Menyambungkan di background...\n");
+
+  printTableHeader();
 }
 
 void loop() {
-  int packetSize = LoRa.parsePacket();
-  if (packetSize > 0) {
-    String rawData = "";
-    while (LoRa.available()) {
-      rawData += (char)LoRa.read();
-    }
-    int rssi = LoRa.packetRssi();
-    unsigned long receiveMillis = millis();
-
-    handleReceivedPacket(rawData, rssi, receiveMillis);
+  // Cek WiFi non-blocking
+  if (!wifiReady && WiFi.status() == WL_CONNECTED) {
+    wifiReady = true;
+    Serial.println("\n[WiFi] Terhubung: " + WiFi.localIP().toString() +
+                   " -> log akan masuk ke Google Sheets\n");
+    printTableHeader();
   }
 
-  if (WiFi.status() != WL_CONNECTED) {
-    connectWiFi();
+  // Cek paket LoRa
+  int packetSize = LoRa.parsePacket();
+  if (packetSize > 0) {
+    String raw = "";
+    while (LoRa.available()) raw += (char)LoRa.read();
+    int rssi = LoRa.packetRssi();
+
+    handlePacket(raw, rssi);
   }
 }
 
+// ====================== INIT LORA ======================
 void setupLoRa() {
   SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_NSS);
   LoRa.setPins(LORA_NSS, LORA_RST, LORA_DIO0);
 
   if (!LoRa.begin(LORA_FREQUENCY)) {
-    Serial.println("[ERROR] LoRa gagal diinisialisasi! Periksa wiring SPI.");
+    Serial.println("[ERROR] LoRa gagal! Periksa wiring.");
     while (1) delay(1000);
   }
   LoRa.setSpreadingFactor(9);
   LoRa.setSignalBandwidth(125E3);
   LoRa.setCodingRate4(5);
-  Serial.println("[OK] LoRa siap menerima.");
+  LoRa.setSyncWord(LORA_SYNC_WORD);
+  Serial.println("[OK] LoRa aktif.");
 }
 
-void connectWiFi() {
-  if (WiFi.status() == WL_CONNECTED) return;
-  Serial.print("Menyambungkan ke WiFi");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  int attempt = 0;
-  while (WiFi.status() != WL_CONNECTED && attempt < 30) {
-    delay(500);
-    Serial.print(".");
-    attempt++;
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n[OK] WiFi terhubung. IP: " + WiFi.localIP().toString());
-  } else {
-    Serial.println("\n[WARNING] WiFi belum tersambung, akan dicoba lagi.");
-  }
+// ====================== HEADER TABEL SERIAL ======================
+void printTableHeader() {
+  Serial.println("  Seq | Terkirim | Diterima | RSSI     | Delay    | Keterangan");
+  Serial.println("------------------------------------------------------------------");
 }
 
-void handleReceivedPacket(String rawData, int rssi, unsigned long receiveMillis) {
-  receivedCounter++;
+// ====================== PROSES PAKET ======================
+void handlePacket(String raw, int rssi) {
+  // Format paket: seq,lastDelay,NODE_ID,rainADC,...
+  //               [0] [1]       [2]     [3]
+  int c1 = raw.indexOf(',');
+  int c2 = raw.indexOf(',', c1 + 1);
 
-  // Field pertama = seq, field kedua = sendMillis dari transmitter
-  int firstComma = rawData.indexOf(',');
-  int secondComma = rawData.indexOf(',', firstComma + 1);
-
-  if (firstComma == -1 || secondComma == -1) {
-    Serial.println("[WARNING] Format paket tidak valid, dilewati: " + rawData);
+  if (c1 == -1 || c2 == -1) {
+    Serial.println("[WARNING] Format paket tidak valid: " + raw);
     return;
   }
 
-  unsigned long seq = rawData.substring(0, firstComma).toInt();
-  unsigned long sendMillis = rawData.substring(firstComma + 1, secondComma).toInt();
+  unsigned long seq      = raw.substring(0, c1).toInt();
+  long          delayMs  = raw.substring(c1 + 1, c2).toInt();
+                           // delay satu arah dari paket sebelumnya
+                           // 0  = paket pertama (normal)
+                           // -1 = paket sebelumnya tidak ada ACK
 
-  float delaySec = (receiveMillis >= sendMillis)
-                      ? (receiveMillis - sendMillis) / 1000.0
-                      : 0.0;  // jaga2 kalau millis() overflow/tidak sinkron
+  receivedCounter++;
 
+  // ═══════════════════════════════════════════════
+  // KIRIM ACK SEGERA sebelum proses apapun
+  // supaya RTT di transmitter tidak terpengaruh
+  // waktu proses Serial.print atau HTTP request
+  // ═══════════════════════════════════════════════
+  LoRa.beginPacket();
+  LoRa.print("ACK," + String(seq));
+  LoRa.endPacket();
+  // ═══════════════════════════════════════════════
+
+  // Keterangan paket loss
   String keterangan;
   if (seq == receivedCounter) {
-    keterangan = "Tidak ada paket hilang";
+    keterangan = "Data Masuk";
+    if (delayMs == 0 && seq == 1) keterangan = "Data Masuk (delay perdana)";
   } else if (seq > receivedCounter) {
     keterangan = "Hilang " + String(seq - receivedCounter) + " paket";
   } else {
-    keterangan = "Seq tidak normal (cek reset board)";
+    keterangan = "Cek reset board";
   }
 
-  Serial.println("---- Paket Diterima ----");
-  Serial.println("Seq (terkirim s/d sekarang) : " + String(seq));
-  Serial.println("Diterima (kumulatif)        : " + String(receivedCounter));
-  Serial.println("RSSI                        : " + String(rssi) + " dBm");
-  Serial.println("Delay (estimasi)            : " + String(delaySec, 3) + " s");
-  Serial.println("Keterangan                  : " + keterangan);
-  Serial.println("Raw                         : " + rawData);
-  Serial.println("-------------------------\n");
+  // Tampilan delay
+  String delayStr;
+  if (delayMs < 0) {
+    delayStr = "  NO_ACK";   // transmitter tidak dapat ACK paket sebelumnya
+  } else {
+    delayStr = String(delayMs) + " ms";
+  }
 
-  // Bunyikan buzzer sebentar sebagai indikator data diterima
+  // Tampilkan di Serial Monitor receiver
+  Serial.printf("  %3lu | %8lu | %8lu | %4d dBm | %8s | %s\n",
+                seq, seq, receivedCounter, rssi,
+                delayStr.c_str(), keterangan.c_str());
+
+  // Buzzer
   digitalWrite(PIN_BUZZER, HIGH);
   delay(BUZZER_BEEP_MS);
   digitalWrite(PIN_BUZZER, LOW);
 
-  sendToGoogleSheet(seq, receivedCounter, rssi, delaySec, keterangan);
+  // Log ke Google Sheets
+  if (wifiReady) {
+    sendToSheets(seq, receivedCounter, rssi, delayMs, keterangan);
+  } else {
+    Serial.println("        [INFO] WiFi belum siap, log belum dikirim ke Sheets.");
+  }
 }
 
-void sendToGoogleSheet(unsigned long dataTerkirim, unsigned long dataDiterima,
-                        int rssi, float delaySec, String keterangan) {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[ERROR] WiFi tidak terhubung, log tidak terkirim ke Sheets.");
-    return;
-  }
-
+// ====================== KIRIM KE GOOGLE SHEETS ======================
+void sendToSheets(unsigned long dataTerkirim, unsigned long dataDiterima,
+                  int rssi, long delayMs, String keterangan) {
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
@@ -181,17 +190,17 @@ void sendToGoogleSheet(unsigned long dataTerkirim, unsigned long dataDiterima,
                "?sheet=LoRaTest" +
                "&dataTerkirim=" + String(dataTerkirim) +
                "&dataDiterima=" + String(dataDiterima) +
-               "&rssi=" + String(rssi) +
-               "&delay=" + String(delaySec, 3) +
-               "&keterangan=" + keterangan;
+               "&rssi="         + String(rssi) +
+               "&delay="        + String(delayMs) +
+               "&keterangan="   + keterangan;
 
   http.begin(client, url);
   int httpCode = http.GET();
 
   if (httpCode > 0) {
-    Serial.println("[OK] Log terkirim ke Google Sheets.");
+    Serial.println("        [OK] -> Google Sheets.");
   } else {
-    Serial.println("[ERROR] Gagal kirim log: " + http.errorToString(httpCode));
+    Serial.printf("        [ERROR] %s\n", http.errorToString(httpCode).c_str());
   }
   http.end();
 }
